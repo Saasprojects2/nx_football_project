@@ -1,0 +1,272 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                  String    @id @default(cuid())
+  email               String?   @unique
+  name                String?
+  password            String?
+  emailVerified       Boolean   @default(false)
+  image               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  phoneNumber         String?   @unique
+  phoneNumberVerified Boolean?  @default(false)
+  gender              Gender?
+  dob                 DateTime?
+  resetToken          String?
+  resetTokenExpiresAt DateTime?
+  city                String?
+  primaryPosition     Position?
+  preferredFoot       Foot?
+  message             String?
+  teams               Team[]    @relation("TeamMembers")
+  managedTeams        Team[]    @relation("TeamManager")
+  sessions            Session[]
+  accounts            Account[]
+
+  managedTournaments Tournament[]       @relation("TournamentAdmin")
+  playerStats        PlayerStats[]
+  matchEvents        MatchEvent[]
+  leaderboardEntries LeaderboardEntry[]
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum Position {
+  STRIKER
+  MIDFIELDER
+  DEFENDER
+  GOALKEEPER
+}
+
+enum Foot {
+  RIGHT
+  LEFT
+  BOTH
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
+model Otp {
+  id          String   @id @default(cuid())
+  phoneNumber String
+  otp         String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@map("otp")
+}
+
+model Team {
+  id                 String             @id @default(uuid())
+  name               String
+  logo               String?
+  description        String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  members            User[]             @relation("TeamMembers")
+  manager            User               @relation("TeamManager", fields: [managerId], references: [id])
+  managerId          String
+  tournaments        Tournament[]       @relation("TournamentTeams")
+  homeFixtures       Fixture[]          @relation("HomeTeam")
+  awayFixtures       Fixture[]          @relation("AwayTeam")
+  lineups            Lineup[]
+  leaderboardEntries LeaderboardEntry[]
+}
+
+model Tournament {
+  id          String             @id @default(uuid())
+  name        String
+  logo        String?
+  description String?
+  startDate   DateTime
+  endDate     DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  admin       User               @relation("TournamentAdmin", fields: [adminId], references: [id])
+  adminId     String
+  teams       Team[]             @relation("TournamentTeams")
+  fixtures    Fixture[]
+  posts       Post[]
+  leaderboard LeaderboardEntry[]
+}
+
+model Fixture {
+  id           String        @id @default(uuid())
+  tournament   Tournament    @relation(fields: [tournamentId], references: [id])
+  tournamentId String
+  homeTeam     Team          @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  homeTeamId   String
+  awayTeam     Team          @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  awayTeamId   String
+  homeScore    Int?
+  awayScore    Int?
+  date         DateTime
+  status       FixtureStatus @default(SCHEDULED)
+  events       MatchEvent[]
+  lineups      Lineup[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+enum FixtureStatus {
+  SCHEDULED
+  LIVE
+  HALF_TIME
+  FULL_TIME
+  CANCELLED
+}
+
+model Lineup {
+  id        String        @id @default(uuid())
+  fixture   Fixture       @relation(fields: [fixtureId], references: [id])
+  fixtureId String
+  team      Team          @relation(fields: [teamId], references: [id])
+  teamId    String
+  players   PlayerStats[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model PlayerStats {
+  id            String   @id @default(uuid())
+  player        User     @relation(fields: [playerId], references: [id])
+  playerId      String
+  lineup        Lineup   @relation(fields: [lineupId], references: [id])
+  lineupId      String
+  position      String?
+  isStarting    Boolean  @default(false)
+  minutesPlayed Int      @default(0)
+  goals         Int      @default(0)
+  assists       Int      @default(0)
+  yellowCards   Int      @default(0)
+  redCards      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model LeaderboardEntry {
+  id           String     @id @default(uuid())
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
+  tournamentId String
+  player       User       @relation(fields: [playerId], references: [id])
+  playerId     String
+  team         Team?      @relation(fields: [teamId], references: [id])
+  teamId       String?
+
+  goals Int @default(0)
+  saves Int @default(0)
+  // add fields as needed (e.g., yellowCards, redCards)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MatchEvent {
+  id        String    @id @default(uuid())
+  fixture   Fixture   @relation(fields: [fixtureId], references: [id])
+  fixtureId String
+  type      EventType
+  minute    Int
+  player    User?     @relation(fields: [playerId], references: [id])
+  playerId  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+enum EventType {
+  GOAL
+  ASSIST
+  YELLOW_CARD
+  RED_CARD
+  SUBSTITUTION
+  GOAL_KICK
+  CORNER
+  PENALTY
+  FOUL
+  SAVE
+  OTHER
+}
+
+model Post {
+  id           String     @id @default(uuid())
+  title        String
+  content      String
+  type         PostType
+  reach        Int        @default(0)
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
+  tournamentId String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+enum PostType {
+  SPONSOR
+  LOCATION
+  CAMPUS_TRIBE
+  THANK_YOU
+  OTHER
+}

@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Fixture" ALTER COLUMN "homeScore" DROP DEFAULT,
+ALTER COLUMN "awayScore" DROP DEFAULT;
