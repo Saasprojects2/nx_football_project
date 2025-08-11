@@ -1,88 +1,40 @@
-name: Build & Push x86-64 to ECR
+name: Deploy to Azure VM
 
-# 1. Trigger on pushes to main or staging
 on:
   push:
     branches:
       - main
 
-# Prevents concurrent deployments from the same branch
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  build-and-push:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 2. Checkout the repository
-      - name: Checkout code
-        uses: actions/checkout@v4 # Fetches your code into the runner environment
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-      # 3. Configure AWS credentials for subsequent AWS CLI/ECR steps
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4 # Exports AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
-
-      # 4. Log in to Amazon ECR
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      # 5. Set up QEMU for building multi‑arch images
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3 # Enables cross‑platform emulation
-
-      # 6. Set up Docker Buildx
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3 # Creates a multi‑arch builder instance
+        uses: docker/setup-buildx-action@v2
 
-      # 8. Build and push Docker image to ECR
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
       - name: Build and Push Docker Image
-        uses: docker/build-push-action@v6 # Supports buildx, multi‑platform and direct push
-        with:
-          context: .
-          platforms: linux/x86-64
-          push: true
-          tags: ${{ steps.login-ecr.outputs.registry }}/nxchamp-backend-ecr:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      - name: Deploy to ECS
-        env:
-          AWS_REGION: ap-south-1
-          CLUSTER_NAME: nxchamp-backend-cluster
-          SERVICE_NAME: nxchamp-backend-task-service-ayah523p 
-          TASK_FAMILY: nxchamp-backend-task
-          CONTAINER_NAME: nxchamp-backend
-          IMAGE_URI: 580073665535.dkr.ecr.ap-south-1.amazonaws.com/nxchamp-backend-ecr
         run: |
-          sudo apt-get update && sudo apt-get install -y jq
+          docker build -t abhitsahu/nx-backend:latest -f backend/Dockerfile backend/
+          docker push abhitsahu/nx-backend:latest
 
-          # Fetch current task definition
-          aws ecs describe-task-definition --task-definition $TASK_FAMILY --region $AWS_REGION > task-def.json
-
-          # Update image in container definition
-          cat task-def.json | \
-            jq --arg IMAGE "$IMAGE_URI" \
-              '.taskDefinition |
-                .containerDefinitions[0].image = $IMAGE |
-                {family, networkMode, containerDefinitions, requiresCompatibilities, cpu, memory, executionRoleArn, taskRoleArn}' \
-            > new-task-def.json
-
-          # Register new revision
-          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://new-task-def.json \
-            --region $AWS_REGION \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-
-          # Update ECS service to use new revision
-          aws ecs update-service \
-            --cluster $CLUSTER_NAME \
-            --service $SERVICE_NAME \
-            --task-definition $NEW_TASK_DEF_ARN \
-            --region $AWS_REGION
+      - name: Deploy to Azure VM via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.AZURE_VM_IP }}
+          username: azureuser
+          key: ${{ secrets.AZURE_SSH_KEY }}
+          script: |
+            docker stop nx-backend || true
+            docker rm nx-backend || true
+            docker pull abhitsahu/nx-backend:latest
+            docker run -d -p 4000:4000 \
+              --name nx-backend \
+              --env-file /home/azureuser/nx_football/.env \
+              abhitsahu/nx-backend:latest
