@@ -21,9 +21,8 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
-          docker build -t abhitsahu/nx-backend:latest -f backend/Dockerfile backend/
+          docker build -t abhitsahu/nx-backend:latest -f Dockerfile .
           docker push abhitsahu/nx-backend:latest
-
       - name: Deploy to Azure VM via SSH
         uses: appleboy/ssh-action@v0.1.10
         with:
