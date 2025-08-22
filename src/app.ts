@@ -66,7 +66,7 @@ app.use('/api/player', playerRoutes);
 
 
 app.get('/', (req, res) => {
-  res.send('For nxchamp-backend docs visit https://prod.nxchamp.com/api-docs time-1d');
+  res.send('For nxchamp-backend docs visit - https://prod.nxchamp.com/api-docs time-1d');
 });
 
 // Error handling middleware
